@@ -1,0 +1,26 @@
+dashboard:
+  title: "Credit Risk and Receivables Dashboard"
+  default_currency: "GBP"
+  default_page_size: 50
+  maximum_table_rows: 5000
+  enable_excel_exports: true
+  enable_chart_exports: true
+  show_demo_disclaimer: true
+  cache_ttl_seconds: 3600
+
+database:
+  engine: "duckdb"
+  path: "data/database/credit_risk.duckdb"
+
+application:
+  environment: "development"
+  log_level: "INFO"
+  show_debug_information: false
+
+pipeline:
+  random_seed: 42
+  num_customers: 2000
+  small_num_customers: 100
+  history_months: 24
+  inject_data_quality_defects: true
+  defect_rate: 0.03

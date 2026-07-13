@@ -1,0 +1,48 @@
+# Credit Risk & Receivables Dashboard — Cursor build rules
+#
+# Source of truth for detail: docs/business_requirements.md
+# This file is a condensed reference for incremental implementation.
+
+## Stack (locked)
+Python 3.11+, Streamlit, pandas, numpy, Plotly, DuckDB, PyArrow, Faker,
+Pydantic, PyYAML, pytest, Ruff, Docker. No Power BI / DAX / proprietary BI.
+
+Prefer standard Streamlit over optional libs (aggrid, option-menu, GE, etc.)
+unless a clear gap appears.
+
+## Architecture
+- Pipeline (`src/`) generates synthetic data, validates, scores risk, writes
+  DuckDB + Parquet. Streamlit only reads analytical tables.
+- Navigation: native multipage — `app/Home.py` + `app/pages/01_…`–`05_…`.
+- Shared filters: `app/components/filters.py` → `st.session_state`.
+- SQL lives in `sql/`; pages call `app/services/` only — no inline SQL in pages.
+- Caching: `st.cache_resource` for DB; `st.cache_data(ttl=…)` for queries,
+  keyed by refresh timestamp after pipeline runs.
+
+## Config
+Validate `config/project_config.yaml` via Pydantic (`src/config.py`) before use.
+Dashboard / database / application sections are required.
+
+## Demo disclaimer (keep visible on Home and wherever risk scores appear)
+> This application uses a fictional dataset and a demonstration risk
+> methodology. It is not a production credit-rating model, regulatory model,
+> or substitute for professional underwriting judgement.
+
+## Working style
+- Implement one phase at a time (see business_requirements.md §27).
+- After each phase: list changed files, run relevant tests /
+  `python -m src.run_pipeline --small`, smoke-test the app when applicable.
+- Fix failures before starting the next phase.
+- Missing DuckDB → friendly “run the pipeline” message, never an unhandled crash.
+- User-friendly errors; log technical detail; no bare `except`.
+
+## Styling (§20–21)
+Dark navy headings, neutral background, blue for neutral values, amber warnings,
+red critical, green favourable. Theme in `.streamlit/config.toml`; limited CSS.
+Never commit `.streamlit/secrets.toml` — placeholders only in `secrets.toml.example`.
+
+## Do not
+- Scatter SQL through page modules.
+- Recompute risk / collections scores inside Streamlit render.
+- Depend on Power BI or closed-source BI tooling.
+- Hide core Streamlit controls with fragile CSS.

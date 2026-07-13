@@ -1,0 +1,3 @@
+-- customer_snapshot.sql
+-- TBD — reusable parameterised SQL for this dashboard query.
+-- Implemented alongside the matching service in app/services/queries.py.

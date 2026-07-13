@@ -1,0 +1,41 @@
+[project]
+name = "credit-risk-receivables-dashboard"
+version = "0.1.0"
+description = "Open-source Streamlit dashboard for credit risk and receivables analytics (synthetic demo data)"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.38",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "plotly>=5.22",
+    "duckdb>=1.0",
+    "pyarrow>=16.0",
+    "faker>=25.0",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.5",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit entrypoints bootstrap ``sys.path`` before local package imports.
+"app/Home.py" = ["E402"]
+"app/pages/*.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
