@@ -8,6 +8,12 @@ from pathlib import Path
 import pandas as pd
 
 from src.config import load_config
+from src.generators.claims import (
+    CLAIM_STATUSES,
+    FACT_CLAIM_COLUMNS,
+    INSURERS,
+    generate_fact_claim,
+)
 from src.generators.common import (
     DEFAULT_PROCESSED_DIR,
     DEFAULT_RAW_DIR,
@@ -551,3 +557,113 @@ def test_generate_fact_credit_decision_seed_changes_rows() -> None:
     b = generate_fact_credit_decision(other, customers)
 
     assert not a.equals(b)
+
+
+# --- fact_claim (Phase 2 step 09) -----------------------------------------------
+
+
+def test_generate_fact_claim_columns_and_ids() -> None:
+    config, customers, invoices = _sample_invoices(120)
+    claims = generate_fact_claim(config, customers, invoices)
+
+    assert list(claims.columns) == list(FACT_CLAIM_COLUMNS)
+    assert len(claims) > 0
+    assert claims["claim_id"].is_unique
+    assert claims["claim_id"].iloc[0] == "CLM-0000001"
+    assert (claims["claim_amount"] >= 0).all()
+    assert (claims["recovery_amount"] >= 0).all()
+    assert set(claims["status"]).issubset(CLAIM_STATUSES)
+    assert set(claims["insurer"]).issubset(INSURERS)
+    assert claims["insurer"].notna().all()
+
+
+def test_generate_fact_claim_customer_and_invoice_fk() -> None:
+    config, customers, invoices = _sample_invoices(100)
+    claims = generate_fact_claim(config, customers, invoices)
+
+    assert set(claims["customer_id"]).issubset(set(customers["customer_id"]))
+    # invoice_id is optional in the schema but populated for these generators.
+    assert claims["invoice_id"].notna().all()
+    assert set(claims["invoice_id"]).issubset(set(invoices["invoice_id"]))
+    assert claims["invoice_id"].is_unique
+
+
+def test_generate_fact_claim_only_insured_overdue_exposure() -> None:
+    config, customers, invoices = _sample_invoices(100)
+    claims = generate_fact_claim(config, customers, invoices)
+
+    insurance_by_id = customers.set_index("customer_id")["credit_insurance_status"]
+    invoice_by_id = invoices.set_index("invoice_id")
+
+    for customer_id, invoice_id in zip(
+        claims["customer_id"], claims["invoice_id"], strict=True
+    ):
+        assert insurance_by_id.loc[customer_id] in ("insured", "partial")
+        invoice = invoice_by_id.loc[invoice_id]
+        assert invoice["status"] in ("overdue", "written_off")
+        assert float(invoice["outstanding_amount"]) > 0
+
+
+def test_generate_fact_claim_amounts_and_recovery() -> None:
+    config, customers, invoices = _sample_invoices(120)
+    claims = generate_fact_claim(config, customers, invoices)
+
+    outstanding_by_invoice = invoices.set_index("invoice_id")["outstanding_amount"]
+    claimed = claims["invoice_id"].map(outstanding_by_invoice)
+    assert (claims["claim_amount"] <= claimed.round(2) + 1e-9).all()
+
+    settled = claims.loc[claims["status"] == "settled"]
+    if not settled.empty:
+        assert (settled["recovery_amount"] > 0).all()
+        assert (settled["recovery_amount"] <= settled["claim_amount"]).all()
+
+    openish = claims.loc[claims["status"] != "settled"]
+    if not openish.empty:
+        assert (openish["recovery_amount"] == 0).all()
+
+
+def test_generate_fact_claim_dates_after_due_date() -> None:
+    config, customers, invoices = _sample_invoices(100)
+    claims = generate_fact_claim(config, customers, invoices)
+
+    _, as_of = history_window_bounds(config.pipeline.history_months)
+    due_by_invoice = pd.to_datetime(
+        invoices.set_index("invoice_id")["due_date"]
+    ).dt.date
+    claim_dates = pd.to_datetime(claims["claim_date"]).dt.date
+    due_dates = claims["invoice_id"].map(due_by_invoice)
+
+    assert (claim_dates >= due_dates).all()
+    assert (claim_dates <= as_of).all()
+
+
+def test_generate_fact_claim_is_deterministic() -> None:
+    config, customers, invoices = _sample_invoices(60)
+    first = generate_fact_claim(config, customers, invoices)
+    second = generate_fact_claim(config, customers, invoices)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_generate_fact_claim_seed_changes_rows() -> None:
+    config, customers, invoices = _sample_invoices(80)
+    other = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"random_seed": 99})}
+    )
+    a = generate_fact_claim(config, customers, invoices)
+    b = generate_fact_claim(other, customers, invoices)
+
+    assert not a.equals(b)
+
+
+def test_generate_fact_claim_sparse_subset() -> None:
+    config, customers, invoices = _sample_invoices(100)
+    claims = generate_fact_claim(config, customers, invoices)
+
+    insurance_by_id = customers.set_index("customer_id")["credit_insurance_status"]
+    eligible = invoices.loc[
+        invoices["customer_id"].map(insurance_by_id).isin(("insured", "partial"))
+        & invoices["status"].isin(("overdue", "written_off"))
+        & (invoices["outstanding_amount"] > 0)
+    ]
+    assert len(claims) < len(eligible)
+    assert len(claims) > 0

@@ -1,5 +1,11 @@
 """Synthetic data generators for the credit-risk pipeline."""
 
+from src.generators.claims import (
+    CLAIM_STATUSES,
+    FACT_CLAIM_COLUMNS,
+    INSURERS,
+    generate_fact_claim,
+)
 from src.generators.common import (
     DEFAULT_PROCESSED_DIR,
     DEFAULT_RAW_DIR,
@@ -36,17 +42,21 @@ from src.generators.payments import (
 )
 
 __all__ = [
+    "CLAIM_STATUSES",
     "DEFAULT_AS_OF_DATE",
     "DEFAULT_PROCESSED_DIR",
     "DEFAULT_RAW_DIR",
     "DECISION_TYPES",
     "DIM_CUSTOMER_COLUMNS",
     "DIM_DATE_COLUMNS",
+    "FACT_CLAIM_COLUMNS",
     "FACT_CREDIT_DECISION_COLUMNS",
     "FACT_INVOICE_COLUMNS",
     "FACT_PAYMENT_COLUMNS",
+    "INSURERS",
     "generate_dim_customer",
     "generate_dim_date",
+    "generate_fact_claim",
     "generate_fact_credit_decision",
     "generate_fact_invoice",
     "generate_fact_payment",
