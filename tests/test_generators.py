@@ -1,11 +1,13 @@
-"""Tests for shared generator helpers (Phase 2 step 03)."""
+"""Tests for synthetic data generators (Phase 2)."""
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
 
+from src.config import load_config
 from src.generators.common import (
     DEFAULT_PROCESSED_DIR,
     DEFAULT_RAW_DIR,
@@ -16,6 +18,12 @@ from src.generators.common import (
     raw_path,
     write_csv,
     write_parquet,
+)
+from src.generators.dates import (
+    DEFAULT_AS_OF_DATE,
+    DIM_DATE_COLUMNS,
+    generate_dim_date,
+    history_window_bounds,
 )
 
 
@@ -75,3 +83,73 @@ def test_write_creates_missing_parent_dirs(tmp_path: Path) -> None:
     assert not nested.parent.exists()
     write_csv(pd.DataFrame({"x": [1]}), nested)
     assert nested.is_file()
+
+
+# --- dim_date (Phase 2 step 04) -------------------------------------------------
+
+
+def test_date_history_window_bounds_for_default_as_of() -> None:
+    start, end = history_window_bounds(24)
+    assert end == DEFAULT_AS_OF_DATE
+    assert start == date(2024, 7, 1)
+    assert (end - start).days + 1 == 730
+
+
+def test_generate_dim_date_row_count_and_columns() -> None:
+    config = load_config()
+    dim_date = generate_dim_date(config)
+
+    start, end = history_window_bounds(config.pipeline.history_months)
+    expected_rows = (end - start).days + 1
+
+    assert list(dim_date.columns) == list(DIM_DATE_COLUMNS)
+    assert len(dim_date) == expected_rows
+    assert dim_date["full_date"].iloc[0] == start
+    assert dim_date["full_date"].iloc[-1] == end
+
+
+def test_generate_dim_date_unique_keys_and_no_gaps() -> None:
+    config = load_config()
+    dim_date = generate_dim_date(config)
+
+    assert dim_date["date_key"].is_unique
+    assert dim_date["full_date"].is_unique
+
+    dates = pd.to_datetime(dim_date["full_date"]).dt.date
+    diffs = dates.diff().iloc[1:]
+    assert (diffs == timedelta(days=1)).all()
+
+
+def test_generate_dim_date_attributes_and_month_ends() -> None:
+    config = load_config()
+    dim_date = generate_dim_date(config)
+
+    june_end = dim_date.loc[dim_date["date_key"] == 20260630].iloc[0]
+    assert june_end["year"] == 2026
+    assert june_end["month"] == 6
+    assert june_end["month_name"] == "June"
+    assert june_end["quarter"] == 2
+    assert bool(june_end["is_month_end"]) is True
+
+    mid_month = dim_date.loc[dim_date["date_key"] == 20260615].iloc[0]
+    assert bool(mid_month["is_month_end"]) is False
+
+    assert dim_date["is_month_end"].dtype == bool
+
+
+def test_generate_dim_date_is_deterministic() -> None:
+    config = load_config()
+    first = generate_dim_date(config)
+    second = generate_dim_date(config)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_generate_dim_date_respects_history_months() -> None:
+    config = load_config()
+    short = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"history_months": 1})}
+    )
+    dim_date = generate_dim_date(short)
+    start, end = history_window_bounds(1)
+    assert len(dim_date) == (end - start).days + 1
+    assert dim_date["full_date"].iloc[0] == start
