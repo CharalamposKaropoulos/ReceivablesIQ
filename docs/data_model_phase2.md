@@ -1,7 +1,11 @@
 # Phase 2 data model (raw synthetic entities)
 
+> **Phase 2 complete.** These tables are produced by
+> `python -m src.run_pipeline` into CSV, Parquet, and DuckDB.
+
 Column contracts, grain, and foreign keys for generators and DuckDB DDL.
 Full data dictionary remains Phase 7 (`docs/data_dictionary.md`).
+Risk / collections / snapshot tables are Phase 3+.
 
 DDL source: [`sql/create_schema.sql`](../sql/create_schema.sql).
 

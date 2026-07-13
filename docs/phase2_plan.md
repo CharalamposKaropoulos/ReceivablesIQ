@@ -1,8 +1,12 @@
 # Phase 2 — Synthetic Data (commit-sized steps)
 
+> **Status: complete (2026-07-13).** Gate checks passed; synthetic pipeline
+> writes CSV / Parquet / DuckDB. Next phase: **Phase 3 — Risk analytics**
+> ([business_requirements.md](business_requirements.md) §27).
+
 Break Phase 2 (synthetic data generators, date dimension, DQ defect injection,
-CSV/Parquet/DuckDB outputs) into small, independently verifiable steps. Each
-step ends with a structured commit before the next begins.
+CSV/Parquet/DuckDB outputs) into small, independently verifiable steps. Kept
+as a historical implementation plan.
 
 Source of truth for phase scope: [business_requirements.md](business_requirements.md) §27.
 
@@ -18,13 +22,13 @@ defect injection**, writing **CSV + Parquet + DuckDB**. Reproducible from
 **Out of scope (later phases):** risk scoring / collections priority (Phase 3),
 validation framework (Phase 4), dashboard wiring (Phase 5).
 
-## Starting point
+## Starting point (historical)
 
-Phase 1 is done. Missing for Phase 2: `src/run_pipeline.py`, all generators,
-writers, schema DDL, and real generator tests. Config knobs already exist in
+Phase 1 was done. Phase 2 delivered: `src/run_pipeline.py`, all generators,
+writers, schema DDL, and generator/pipeline tests. Config knobs live in
 [`config/project_config.yaml`](../config/project_config.yaml) /
-[`src/config.py`](../src/config.py). [`app/Home.py`](../app/Home.py) already
-expects `dim_customer` and `fact_invoice` when present.
+[`src/config.py`](../src/config.py). [`app/Home.py`](../app/Home.py) reads
+`dim_customer` and `fact_invoice` when present.
 
 ## Commit message structure (required every step)
 
@@ -69,20 +73,20 @@ flowchart LR
 
 ### Step checklist
 
-| Step | Deliverable | Commit summary |
-|------|-------------|----------------|
-| 01 | Schema + data-model notes | `phase2(step-01): add Phase 2 dimensional schema and data-model notes` |
-| 02 | Pipeline CLI skeleton | `phase2(step-02): add run_pipeline CLI with config and logging` |
-| 03 | Shared Faker/IO helpers | `phase2(step-03): add seeded Faker helpers and CSV/Parquet writers` |
-| 04 | Date dimension | `phase2(step-04): generate deterministic date dimension` |
-| 05 | Customers | `phase2(step-05): generate synthetic customers with filter dimensions` |
-| 06 | Invoices | `phase2(step-06): generate synthetic invoices linked to customers` |
-| 07 | Payments | `phase2(step-07): generate synthetic payments linked to invoices` |
-| 08 | Credit decisions | `phase2(step-08): generate synthetic credit-decision history` |
-| 09 | Claims | `phase2(step-09): generate synthetic insurance claims` |
-| 10 | DQ defect injection | `phase2(step-10): inject configurable data-quality defects` |
-| 11 | Orchestrator + DuckDB load | `phase2(step-11): orchestrate full synthetic pipeline into DuckDB` |
-| 12 | Phase 2 gate + README | `phase2(step-12): complete Phase 2 gate and update README status` |
+| Step | Deliverable | Status | Commit summary |
+|------|-------------|--------|----------------|
+| 01 | Schema + data-model notes | Done | `phase2(step-01): add Phase 2 dimensional schema and data-model notes` |
+| 02 | Pipeline CLI skeleton | Done | `phase2(step-02): add run_pipeline CLI with config and logging` |
+| 03 | Shared Faker/IO helpers | Done | `phase2(step-03): add seeded Faker helpers and CSV/Parquet writers` |
+| 04 | Date dimension | Done | `phase2(step-04): generate deterministic date dimension` |
+| 05 | Customers | Done | `phase2(step-05): generate synthetic customers with filter dimensions` |
+| 06 | Invoices | Done | `phase2(step-06): generate synthetic invoices linked to customers` |
+| 07 | Payments | Done | `phase2(step-07): generate synthetic payments linked to invoices` |
+| 08 | Credit decisions | Done | `phase2(step-08): generate synthetic credit-decision history` |
+| 09 | Claims | Done | `phase2(step-09): generate synthetic insurance claims` |
+| 10 | DQ defect injection | Done | `phase2(step-10): inject configurable data-quality defects` |
+| 11 | Orchestrator + DuckDB load | Done | `phase2(step-11): orchestrate full synthetic pipeline into DuckDB` |
+| 12 | Phase 2 gate + README | Done | `phase2(step-12): complete Phase 2 gate and update README status` |
 
 ---
 
@@ -283,13 +287,15 @@ uv run pytest tests/test_pipeline.py tests/test_generators.py -q
 
 ## Step 12 — Phase 2 gate + README status bump
 
+**Status: done.**
+
 **Deliver:** Confirm reproducibility and document that Phase 2 is complete.
 
 **Checks:**
 
-- Two runs with same seed produce identical row counts and checksums on key columns (test in `tests/test_pipeline.py`)
+- Two runs with same seed produce identical row counts and checksums on key columns (`test_pipeline_same_seed_produces_identical_row_counts_and_checksums`)
 - Full foundation + generator + pipeline tests green
-- Update README status line from “scaffolding only” to note Phase 2 synthetic pipeline is available
+- README / §27 / `.cursorrules` mark Phase 2 complete; next is Phase 3
 
 **Verify:**
 
@@ -333,8 +339,10 @@ stricter contracts before payments / DQ injection / orchestration.
 
 ## Done when
 
+All criteria met:
+
 - `uv run python -m src.run_pipeline --small` creates DuckDB + CSV/Parquet
 - `--skip-defects` skips injection; default config injects at `defect_rate`
-- Same seed → same outputs
+- Same seed → same outputs (see `test_pipeline_same_seed_produces_identical_row_counts_and_checksums`)
 - Home page can count `dim_customer` / `fact_invoice` without crashing
-- 12 commits exist, each matching the template
+- README and §27 mark Phase 2 complete; next work is Phase 3

@@ -5,8 +5,11 @@ accounts-receivable management, built on synthetic data with a reproducible
 data pipeline (DuckDB + Parquet). No Power BI, DAX, or proprietary BI tooling
 anywhere in the stack.
 
-> **Status:** scaffolding only — this is the initial repo skeleton. See
-> `.cursorrules` and `docs/business_requirements.md` for the full build plan.
+> **Status:** Phase 2 complete — synthetic data pipeline is available
+> (`customers`, `invoices`, `payments`, `credit decisions`, `claims`, date
+> dimension, optional DQ defect injection → CSV / Parquet / DuckDB).
+> Next: Phase 3 (risk analytics). See `.cursorrules` and
+> `docs/business_requirements.md` §27 for the full build plan.
 
 > This application uses a fictional dataset and a demonstration risk
 > methodology. It is not a production credit-rating model, regulatory model,
@@ -61,6 +64,16 @@ uv run python -m src.run_pipeline --skip-defects   # skip data-quality injection
 uv run python -m src.run_pipeline --config config/project_config.yaml
 ```
 
+After a successful run you get:
+
+- CSV under `data/raw/`
+- Parquet under `data/processed/`
+- DuckDB at `data/database/credit_risk.duckdb` (path from config)
+
+Outputs are reproducible from `pipeline.random_seed` in
+`config/project_config.yaml`. Phase 2 data-model notes:
+[`docs/data_model_phase2.md`](docs/data_model_phase2.md).
+
 ## Docker
 ```bash
 docker compose up --build
@@ -80,12 +93,19 @@ uv run ruff check .
 4. **Customer Details** — full drill-down per customer across invoices, payments, risk, claims.
 5. **Data Quality** — validation results, failure trends, refresh/freshness monitoring.
 
-## Roadmap / not yet built
-This repo currently contains scaffolding only (folder structure, config,
-Docker, and Cursor project rules). The data pipeline and dashboard pages are
-built incrementally — see `docs/business_requirements.md` section 27 for the
-phase-by-phase plan and `.cursorrules` for how Cursor should approach each
-phase.
+## Build progress
+| Phase | Scope | Status |
+|-------|--------|--------|
+| 1 | Foundation (repo, config, logging, DuckDB utils, Home) | Done |
+| 2 | Synthetic data generators + CSV/Parquet/DuckDB | Done |
+| 3 | Risk analytics & collections priority | Next |
+| 4 | Validation framework | Planned |
+| 5 | Streamlit dashboard pages | Planned |
+| 6 | Testing and optimisation | Planned |
+| 7 | Documentation and deployment polish | Planned |
+
+Detail: `docs/business_requirements.md` §27. Phase 2 step plan (historical):
+`docs/phase2_plan.md`.
 
 ## Disclaimer
 All data is synthetically generated. Risk scoring and collections

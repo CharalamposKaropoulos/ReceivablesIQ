@@ -278,11 +278,23 @@ flowchart LR
 
 ## 27. Updated development phases
 
-**Phase 1 — Foundation:** repository structure, Python environment, configuration, logging, DuckDB connection utilities, Streamlit landing page, basic navigation.
+**Current progress:** Phases 1–2 complete. **Next: Phase 3 — Risk analytics.**
 
-**Phase 2 — Synthetic data:** customer/invoice/payment/credit-decision/claims generators, date dimension, data-quality issue injection.
+| Phase | Scope | Status |
+|-------|--------|--------|
+| 1 | Foundation | **Done** |
+| 2 | Synthetic data | **Done** |
+| 3 | Risk analytics | **Next** |
+| 4 | Validation | Planned |
+| 5 | Streamlit dashboard | Planned |
+| 6 | Testing and optimisation | Planned |
+| 7 | Documentation and deployment | Planned |
 
-**Phase 3 — Risk analytics:** risk model, risk history, collections-priority model, monthly snapshots, portfolio aggregations, executive metrics.
+**Phase 1 — Foundation (done):** repository structure, Python environment, configuration, logging, DuckDB connection utilities, Streamlit landing page, basic navigation.
+
+**Phase 2 — Synthetic data (done):** customer/invoice/payment/credit-decision/claims generators, date dimension, data-quality issue injection, CSV/Parquet writers, DuckDB load via `python -m src.run_pipeline`. Implementation plan: [phase2_plan.md](phase2_plan.md). Column contracts: [data_model_phase2.md](data_model_phase2.md).
+
+**Phase 3 — Risk analytics (next):** risk model, risk history, collections-priority model, monthly snapshots, portfolio aggregations, executive metrics.
 
 **Phase 4 — Validation:** validation framework, validation history, failed-record samples, pipeline metadata, refresh monitoring.
 
