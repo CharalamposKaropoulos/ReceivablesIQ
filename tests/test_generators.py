@@ -43,6 +43,11 @@ from src.generators.dates import (
     generate_dim_date,
     history_window_bounds,
 )
+from src.generators.defects import (
+    DEFECT_AUDIT_COLUMNS,
+    DEFECT_TYPES,
+    inject_data_quality_defects,
+)
 from src.generators.invoices import (
     FACT_INVOICE_COLUMNS,
     INVOICE_STATUSES,
@@ -667,3 +672,161 @@ def test_generate_fact_claim_sparse_subset() -> None:
     ]
     assert len(claims) < len(eligible)
     assert len(claims) > 0
+
+
+# --- DQ defect injection (Phase 2 step 10) --------------------------------------
+
+
+def _sample_payments(n_customers: int = 50):
+    config, customers, invoices = _sample_invoices(n_customers)
+    payments = generate_fact_payment(config, invoices)
+    return config, customers, invoices, payments
+
+
+def _config_with_defects(
+    config,
+    *,
+    inject: bool = True,
+    rate: float = 0.05,
+    seed: int | None = None,
+):
+    updates: dict = {
+        "inject_data_quality_defects": inject,
+        "defect_rate": rate,
+    }
+    if seed is not None:
+        updates["random_seed"] = seed
+    return config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update=updates)}
+    )
+
+
+def test_inject_defects_skip_leaves_tables_unchanged() -> None:
+    config, customers, invoices, payments = _sample_payments(40)
+    cfg = _config_with_defects(config, inject=True, rate=0.1)
+
+    out_c, out_i, out_p, audit = inject_data_quality_defects(
+        cfg, customers, invoices, payments, skip=True
+    )
+
+    pd.testing.assert_frame_equal(out_c, customers)
+    pd.testing.assert_frame_equal(out_i, invoices)
+    pd.testing.assert_frame_equal(out_p, payments)
+    assert list(audit.columns) == list(DEFECT_AUDIT_COLUMNS)
+    assert audit.empty
+
+
+def test_inject_defects_rate_zero_unchanged() -> None:
+    config, customers, invoices, payments = _sample_payments(40)
+    cfg = _config_with_defects(config, inject=True, rate=0.0)
+
+    out_c, out_i, out_p, audit = inject_data_quality_defects(
+        cfg, customers, invoices, payments
+    )
+
+    pd.testing.assert_frame_equal(out_c, customers)
+    pd.testing.assert_frame_equal(out_i, invoices)
+    pd.testing.assert_frame_equal(out_p, payments)
+    assert audit.empty
+
+
+def test_inject_defects_disabled_in_config_unchanged() -> None:
+    config, customers, invoices, payments = _sample_payments(40)
+    cfg = _config_with_defects(config, inject=False, rate=0.1)
+
+    _, out_i, out_p, audit = inject_data_quality_defects(
+        cfg, customers, invoices, payments
+    )
+
+    pd.testing.assert_frame_equal(out_i, invoices)
+    pd.testing.assert_frame_equal(out_p, payments)
+    assert audit.empty
+
+
+def test_inject_defects_rate_positive_produces_measurable_defects() -> None:
+    config, customers, invoices, payments = _sample_payments(60)
+    cfg = _config_with_defects(config, inject=True, rate=0.08)
+
+    _, out_i, out_p, audit = inject_data_quality_defects(
+        cfg, customers, invoices, payments
+    )
+
+    assert not audit.empty
+    assert set(audit["defect_type"]).issubset(DEFECT_TYPES)
+    assert list(audit.columns) == list(DEFECT_AUDIT_COLUMNS)
+
+    # Missing customer identifiers on invoices.
+    assert out_i["customer_id"].isna().any()
+
+    # Duplicate invoice_ids.
+    assert not out_i["invoice_id"].is_unique
+    assert len(out_i) > len(invoices)
+
+    # Payments larger than linked invoice amount.
+    amount_by_invoice = out_i.drop_duplicates(subset=["invoice_id"]).set_index(
+        "invoice_id"
+    )["invoice_amount"]
+    linked = out_p["invoice_id"].map(amount_by_invoice)
+    assert (out_p["payment_amount"] > linked).any()
+
+    # Invalid dates: due before invoice and/or payment before invoice.
+    due_before = pd.to_datetime(out_i["due_date"]).dt.date < pd.to_datetime(
+        out_i["invoice_date"]
+    ).dt.date
+    assert due_before.any()
+
+    inv_date_by_id = out_i.drop_duplicates(subset=["invoice_id"]).set_index(
+        "invoice_id"
+    )["invoice_date"]
+    pay_dates = pd.to_datetime(out_p["payment_date"]).dt.date
+    inv_dates = pd.to_datetime(out_p["invoice_id"].map(inv_date_by_id)).dt.date
+    assert (pay_dates < inv_dates).any()
+
+
+def test_inject_defects_does_not_mutate_inputs() -> None:
+    config, customers, invoices, payments = _sample_payments(40)
+    cfg = _config_with_defects(config, inject=True, rate=0.1)
+
+    invoices_before = invoices.copy()
+    payments_before = payments.copy()
+    inject_data_quality_defects(cfg, customers, invoices, payments)
+
+    pd.testing.assert_frame_equal(invoices, invoices_before)
+    pd.testing.assert_frame_equal(payments, payments_before)
+
+
+def test_inject_defects_is_deterministic() -> None:
+    config, customers, invoices, payments = _sample_payments(45)
+    cfg = _config_with_defects(config, inject=True, rate=0.06)
+
+    a = inject_data_quality_defects(cfg, customers, invoices, payments)
+    b = inject_data_quality_defects(cfg, customers, invoices, payments)
+
+    for left, right in zip(a, b, strict=True):
+        pd.testing.assert_frame_equal(left, right)
+
+
+def test_inject_defects_seed_changes_audit() -> None:
+    config, customers, invoices, payments = _sample_payments(50)
+    cfg_a = _config_with_defects(config, inject=True, rate=0.06, seed=42)
+    cfg_b = _config_with_defects(config, inject=True, rate=0.06, seed=99)
+
+    _, _, _, audit_a = inject_data_quality_defects(
+        cfg_a, customers, invoices, payments
+    )
+    _, _, _, audit_b = inject_data_quality_defects(
+        cfg_b, customers, invoices, payments
+    )
+
+    assert not audit_a.equals(audit_b)
+
+
+def test_inject_defects_audit_covers_all_types() -> None:
+    config, customers, invoices, payments = _sample_payments(80)
+    cfg = _config_with_defects(config, inject=True, rate=0.1)
+
+    _, _, _, audit = inject_data_quality_defects(cfg, customers, invoices, payments)
+
+    assert set(DEFECT_TYPES).issubset(set(audit["defect_type"]))
+    assert audit["defect_id"].is_unique
+    assert audit["defect_id"].iloc[0] == "DEF-0000001"

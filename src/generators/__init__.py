@@ -32,6 +32,11 @@ from src.generators.dates import (
     generate_dim_date,
     history_window_bounds,
 )
+from src.generators.defects import (
+    DEFECT_AUDIT_COLUMNS,
+    DEFECT_TYPES,
+    inject_data_quality_defects,
+)
 from src.generators.invoices import (
     FACT_INVOICE_COLUMNS,
     generate_fact_invoice,
@@ -47,6 +52,8 @@ __all__ = [
     "DEFAULT_PROCESSED_DIR",
     "DEFAULT_RAW_DIR",
     "DECISION_TYPES",
+    "DEFECT_AUDIT_COLUMNS",
+    "DEFECT_TYPES",
     "DIM_CUSTOMER_COLUMNS",
     "DIM_DATE_COLUMNS",
     "FACT_CLAIM_COLUMNS",
@@ -61,6 +68,7 @@ __all__ = [
     "generate_fact_invoice",
     "generate_fact_payment",
     "history_window_bounds",
+    "inject_data_quality_defects",
     "make_faker",
     "processed_dir",
     "processed_path",
