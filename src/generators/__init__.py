@@ -25,6 +25,10 @@ from src.generators.invoices import (
     FACT_INVOICE_COLUMNS,
     generate_fact_invoice,
 )
+from src.generators.payments import (
+    FACT_PAYMENT_COLUMNS,
+    generate_fact_payment,
+)
 
 __all__ = [
     "DEFAULT_AS_OF_DATE",
@@ -33,9 +37,11 @@ __all__ = [
     "DIM_CUSTOMER_COLUMNS",
     "DIM_DATE_COLUMNS",
     "FACT_INVOICE_COLUMNS",
+    "FACT_PAYMENT_COLUMNS",
     "generate_dim_customer",
     "generate_dim_date",
     "generate_fact_invoice",
+    "generate_fact_payment",
     "history_window_bounds",
     "make_faker",
     "processed_dir",

@@ -37,6 +37,10 @@ from src.generators.invoices import (
     INVOICE_STATUSES,
     generate_fact_invoice,
 )
+from src.generators.payments import (
+    FACT_PAYMENT_COLUMNS,
+    generate_fact_payment,
+)
 
 
 def test_make_faker_is_reproducible() -> None:
@@ -342,5 +346,104 @@ def test_generate_fact_invoice_seed_changes_amounts() -> None:
     )
     a = generate_fact_invoice(config, customers)
     b = generate_fact_invoice(other, customers)
+
+    assert not a.equals(b)
+
+
+# --- fact_payment (Phase 2 step 07) ---------------------------------------------
+
+
+def _sample_invoices(n_customers: int = 40):
+    config, customers = _sample_customers(n_customers)
+    invoices = generate_fact_invoice(config, customers)
+    return config, customers, invoices
+
+
+def test_generate_fact_payment_columns_and_ids() -> None:
+    config, _, invoices = _sample_invoices(30)
+    payments = generate_fact_payment(config, invoices)
+
+    assert list(payments.columns) == list(FACT_PAYMENT_COLUMNS)
+    assert len(payments) > 0
+    assert payments["payment_id"].is_unique
+    assert payments["payment_id"].iloc[0] == "PAY-0000001"
+    assert (payments["payment_amount"] > 0).all()
+
+
+def test_generate_fact_payment_invoice_fk_integrity() -> None:
+    config, _, invoices = _sample_invoices(50)
+    payments = generate_fact_payment(config, invoices)
+
+    invoice_ids = set(invoices["invoice_id"])
+    assert set(payments["invoice_id"]).issubset(invoice_ids)
+
+    customer_by_invoice = invoices.set_index("invoice_id")["customer_id"]
+    matched = payments["invoice_id"].map(customer_by_invoice)
+    assert (payments["customer_id"] == matched).all()
+
+
+def test_generate_fact_payment_date_on_or_after_invoice() -> None:
+    config, _, invoices = _sample_invoices(40)
+    payments = generate_fact_payment(config, invoices)
+
+    _, as_of = history_window_bounds(config.pipeline.history_months)
+    invoice_date_by_id = pd.to_datetime(
+        invoices.set_index("invoice_id")["invoice_date"]
+    ).dt.date
+    payment_dates = pd.to_datetime(payments["payment_date"]).dt.date
+    linked_invoice_dates = payments["invoice_id"].map(invoice_date_by_id)
+
+    assert (payment_dates >= linked_invoice_dates).all()
+    assert (payment_dates <= as_of).all()
+
+
+def test_generate_fact_payment_sums_match_invoice_paid() -> None:
+    config, _, invoices = _sample_invoices(45)
+    payments = generate_fact_payment(config, invoices)
+
+    paid_by_invoice = (
+        payments.groupby("invoice_id", sort=False)["payment_amount"]
+        .sum()
+        .round(2)
+    )
+    expected = (
+        invoices.assign(
+            paid=(invoices["invoice_amount"] - invoices["outstanding_amount"]).round(2)
+        )
+        .loc[lambda df: df["paid"] > 0]
+        .set_index("invoice_id")["paid"]
+    )
+
+    assert set(paid_by_invoice.index) == set(expected.index)
+    pd.testing.assert_series_equal(
+        paid_by_invoice.sort_index(),
+        expected.sort_index(),
+        check_names=False,
+    )
+
+    # Fully open / overdue invoices (nothing paid) produce no payment rows.
+    unpaid_ids = set(
+        invoices.loc[
+            (invoices["invoice_amount"] - invoices["outstanding_amount"]).round(2) <= 0,
+            "invoice_id",
+        ]
+    )
+    assert unpaid_ids.isdisjoint(set(payments["invoice_id"]))
+
+
+def test_generate_fact_payment_is_deterministic() -> None:
+    config, _, invoices = _sample_invoices(25)
+    first = generate_fact_payment(config, invoices)
+    second = generate_fact_payment(config, invoices)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_generate_fact_payment_seed_changes_rows() -> None:
+    config, _, invoices = _sample_invoices(20)
+    other = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"random_seed": 99})}
+    )
+    a = generate_fact_payment(config, invoices)
+    b = generate_fact_payment(other, invoices)
 
     assert not a.equals(b)
