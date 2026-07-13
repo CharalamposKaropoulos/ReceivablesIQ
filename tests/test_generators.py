@@ -19,6 +19,13 @@ from src.generators.common import (
     write_csv,
     write_parquet,
 )
+from src.generators.customers import (
+    COUNTRY_REGIONS,
+    CREDIT_INSURANCE_STATUSES,
+    DIM_CUSTOMER_COLUMNS,
+    STATUSES,
+    generate_dim_customer,
+)
 from src.generators.dates import (
     DEFAULT_AS_OF_DATE,
     DIM_DATE_COLUMNS,
@@ -153,3 +160,97 @@ def test_generate_dim_date_respects_history_months() -> None:
     start, end = history_window_bounds(1)
     assert len(dim_date) == (end - start).days + 1
     assert dim_date["full_date"].iloc[0] == start
+
+
+# --- dim_customer (Phase 2 step 05) ---------------------------------------------
+
+
+def test_generate_dim_customer_row_count_and_columns() -> None:
+    config = load_config()
+    customers = generate_dim_customer(config, n=config.pipeline.small_num_customers)
+
+    assert list(customers.columns) == list(DIM_CUSTOMER_COLUMNS)
+    assert len(customers) == config.pipeline.small_num_customers
+
+
+def test_generate_dim_customer_unique_ids_and_no_null_pks() -> None:
+    config = load_config()
+    customers = generate_dim_customer(config, n=50)
+
+    assert customers["customer_id"].is_unique
+    assert customers["customer_id"].notna().all()
+    assert (customers["customer_id"].astype(str).str.len() > 0).all()
+    assert customers["customer_id"].iloc[0] == "CUST-000001"
+    assert customers["customer_id"].iloc[-1] == "CUST-000050"
+
+
+def test_generate_dim_customer_filter_dimensions_populated() -> None:
+    config = load_config()
+    customers = generate_dim_customer(config, n=80)
+
+    required = [
+        "country",
+        "region",
+        "industry",
+        "account_manager",
+        "collections_owner",
+        "status",
+        "credit_insurance_status",
+        "currency",
+        "business_unit",
+        "name",
+        "credit_limit",
+        "created_date",
+    ]
+    for column in required:
+        assert customers[column].notna().all(), f"{column} has nulls"
+        assert (customers[column].astype(str).str.len() > 0).all()
+
+    assert set(customers["status"]).issubset(STATUSES)
+    assert set(customers["credit_insurance_status"]).issubset(CREDIT_INSURANCE_STATUSES)
+    assert set(customers["country"]).issubset(COUNTRY_REGIONS.keys())
+    assert (customers["credit_limit"] > 0).all()
+
+    history_start, as_of = history_window_bounds(config.pipeline.history_months)
+    earliest_created = history_start - timedelta(days=365 * 5)
+    created = pd.to_datetime(customers["created_date"]).dt.date
+    assert (created <= as_of).all()
+    assert (created >= earliest_created).all()
+
+
+def test_generate_dim_customer_region_matches_country() -> None:
+    config = load_config()
+    customers = generate_dim_customer(config, n=60)
+
+    for country, region in zip(
+        customers["country"], customers["region"], strict=True
+    ):
+        assert region in COUNTRY_REGIONS[country]
+
+
+def test_generate_dim_customer_is_deterministic() -> None:
+    config = load_config()
+    first = generate_dim_customer(config, n=25)
+    second = generate_dim_customer(config, n=25)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_generate_dim_customer_seed_changes_names_and_ids_stable() -> None:
+    config = load_config()
+    other = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"random_seed": 99})}
+    )
+    a = generate_dim_customer(config, n=10)
+    b = generate_dim_customer(other, n=10)
+
+    assert list(a["customer_id"]) == list(b["customer_id"])
+    assert list(a["name"]) != list(b["name"])
+
+
+def test_generate_dim_customer_defaults_to_num_customers() -> None:
+    config = load_config()
+    tiny = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"num_customers": 7})}
+    )
+    customers = generate_dim_customer(tiny)
+    assert len(customers) == 7
