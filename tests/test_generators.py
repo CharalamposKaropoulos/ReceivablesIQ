@@ -19,6 +19,11 @@ from src.generators.common import (
     write_csv,
     write_parquet,
 )
+from src.generators.credit_decisions import (
+    DECISION_TYPES,
+    FACT_CREDIT_DECISION_COLUMNS,
+    generate_fact_credit_decision,
+)
 from src.generators.customers import (
     COUNTRY_REGIONS,
     CREDIT_INSURANCE_STATUSES,
@@ -445,5 +450,104 @@ def test_generate_fact_payment_seed_changes_rows() -> None:
     )
     a = generate_fact_payment(config, invoices)
     b = generate_fact_payment(other, invoices)
+
+    assert not a.equals(b)
+
+
+# --- fact_credit_decision (Phase 2 step 08) -------------------------------------
+
+
+def test_generate_fact_credit_decision_columns_and_ids() -> None:
+    config, customers = _sample_customers(80)
+    decisions = generate_fact_credit_decision(config, customers)
+
+    assert list(decisions.columns) == list(FACT_CREDIT_DECISION_COLUMNS)
+    assert len(decisions) > 0
+    assert decisions["decision_id"].is_unique
+    assert decisions["decision_id"].iloc[0] == "CRD-0000001"
+    assert decisions["previous_limit"].notna().all()
+    assert decisions["new_limit"].notna().all()
+    assert (decisions["previous_limit"] >= 0).all()
+    assert (decisions["new_limit"] >= 0).all()
+    assert set(decisions["decision_type"]).issubset(DECISION_TYPES)
+    assert decisions["decision_reason"].notna().all()
+
+
+def test_generate_fact_credit_decision_customer_fk_integrity() -> None:
+    config, customers = _sample_customers(100)
+    decisions = generate_fact_credit_decision(config, customers)
+
+    customer_ids = set(customers["customer_id"])
+    assert set(decisions["customer_id"]).issubset(customer_ids)
+    # Sparse: not every customer appears.
+    assert len(set(decisions["customer_id"])) < len(customers)
+
+
+def test_generate_fact_credit_decision_limits_match_type() -> None:
+    config, customers = _sample_customers(120)
+    decisions = generate_fact_credit_decision(config, customers)
+
+    for decision_type, previous, new in zip(
+        decisions["decision_type"],
+        decisions["previous_limit"],
+        decisions["new_limit"],
+        strict=True,
+    ):
+        if decision_type in ("review", "hold"):
+            assert previous == new
+        elif decision_type == "increase":
+            assert new > previous
+        elif decision_type == "decrease":
+            assert new < previous
+        elif decision_type == "new":
+            assert previous == 0.0
+            assert new >= 0.0
+
+
+def test_generate_fact_credit_decision_final_limit_matches_customer() -> None:
+    config, customers = _sample_customers(90)
+    decisions = generate_fact_credit_decision(config, customers)
+
+    credit_by_customer = customers.set_index("customer_id")["credit_limit"]
+    latest = (
+        decisions.sort_values(["customer_id", "decision_date", "decision_id"])
+        .groupby("customer_id", sort=False)
+        .tail(1)
+        .set_index("customer_id")
+    )
+    expected = latest.index.map(credit_by_customer)
+    assert (latest["new_limit"].to_numpy() == expected.to_numpy()).all()
+
+
+def test_generate_fact_credit_decision_dates_in_window() -> None:
+    config, customers = _sample_customers(80)
+    decisions = generate_fact_credit_decision(config, customers)
+
+    history_start, as_of = history_window_bounds(config.pipeline.history_months)
+    created_by_id = pd.to_datetime(
+        customers.set_index("customer_id")["created_date"]
+    ).dt.date
+    decision_dates = pd.to_datetime(decisions["decision_date"]).dt.date
+    created = decisions["customer_id"].map(created_by_id)
+
+    assert (decision_dates >= history_start).all()
+    assert (decision_dates <= as_of).all()
+    assert (decision_dates >= created).all()
+
+
+def test_generate_fact_credit_decision_is_deterministic() -> None:
+    config, customers = _sample_customers(40)
+    first = generate_fact_credit_decision(config, customers)
+    second = generate_fact_credit_decision(config, customers)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_generate_fact_credit_decision_seed_changes_rows() -> None:
+    config, customers = _sample_customers(50)
+    other = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"random_seed": 99})}
+    )
+    a = generate_fact_credit_decision(config, customers)
+    b = generate_fact_credit_decision(other, customers)
 
     assert not a.equals(b)
