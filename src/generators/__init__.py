@@ -21,6 +21,10 @@ from src.generators.dates import (
     generate_dim_date,
     history_window_bounds,
 )
+from src.generators.invoices import (
+    FACT_INVOICE_COLUMNS,
+    generate_fact_invoice,
+)
 
 __all__ = [
     "DEFAULT_AS_OF_DATE",
@@ -28,8 +32,10 @@ __all__ = [
     "DEFAULT_RAW_DIR",
     "DIM_CUSTOMER_COLUMNS",
     "DIM_DATE_COLUMNS",
+    "FACT_INVOICE_COLUMNS",
     "generate_dim_customer",
     "generate_dim_date",
+    "generate_fact_invoice",
     "history_window_bounds",
     "make_faker",
     "processed_dir",

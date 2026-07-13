@@ -32,6 +32,11 @@ from src.generators.dates import (
     generate_dim_date,
     history_window_bounds,
 )
+from src.generators.invoices import (
+    FACT_INVOICE_COLUMNS,
+    INVOICE_STATUSES,
+    generate_fact_invoice,
+)
 
 
 def test_make_faker_is_reproducible() -> None:
@@ -254,3 +259,88 @@ def test_generate_dim_customer_defaults_to_num_customers() -> None:
     )
     customers = generate_dim_customer(tiny)
     assert len(customers) == 7
+
+
+# --- fact_invoice (Phase 2 step 06) ---------------------------------------------
+
+
+def _sample_customers(n: int = 40):
+    config = load_config()
+    customers = generate_dim_customer(config, n=n)
+    return config, customers
+
+
+def test_generate_fact_invoice_columns_and_non_empty() -> None:
+    config, customers = _sample_customers(30)
+    invoices = generate_fact_invoice(config, customers)
+
+    assert list(invoices.columns) == list(FACT_INVOICE_COLUMNS)
+    assert len(invoices) > 0
+    assert invoices["invoice_id"].is_unique
+    assert invoices["invoice_id"].iloc[0] == "INV-0000001"
+
+
+def test_generate_fact_invoice_customer_fk_integrity() -> None:
+    config, customers = _sample_customers(50)
+    invoices = generate_fact_invoice(config, customers)
+
+    customer_ids = set(customers["customer_id"])
+    assert set(invoices["customer_id"]).issubset(customer_ids)
+
+
+def test_generate_fact_invoice_dates_within_history() -> None:
+    config, customers = _sample_customers(40)
+    invoices = generate_fact_invoice(config, customers)
+
+    history_start, as_of = history_window_bounds(config.pipeline.history_months)
+    invoice_dates = pd.to_datetime(invoices["invoice_date"]).dt.date
+    due_dates = pd.to_datetime(invoices["due_date"]).dt.date
+
+    assert (invoice_dates >= history_start).all()
+    assert (invoice_dates <= as_of).all()
+    assert (due_dates >= invoice_dates).all()
+
+
+def test_generate_fact_invoice_amounts_and_status_clean() -> None:
+    config, customers = _sample_customers(45)
+    invoices = generate_fact_invoice(config, customers)
+
+    assert (invoices["invoice_amount"] >= 0).all()
+    assert (invoices["outstanding_amount"] >= 0).all()
+    assert (
+        invoices["outstanding_amount"] <= invoices["invoice_amount"]
+    ).all()
+    assert set(invoices["status"]).issubset(INVOICE_STATUSES)
+    assert invoices["dispute_flag"].dtype == bool
+    assert invoices["currency"].notna().all()
+
+    paid = invoices.loc[invoices["status"] == "paid"]
+    if not paid.empty:
+        assert (paid["outstanding_amount"] == 0).all()
+
+
+def test_generate_fact_invoice_currency_matches_customer() -> None:
+    config, customers = _sample_customers(35)
+    invoices = generate_fact_invoice(config, customers)
+
+    currency_by_customer = customers.set_index("customer_id")["currency"]
+    matched = invoices["customer_id"].map(currency_by_customer)
+    assert (invoices["currency"] == matched).all()
+
+
+def test_generate_fact_invoice_is_deterministic() -> None:
+    config, customers = _sample_customers(25)
+    first = generate_fact_invoice(config, customers)
+    second = generate_fact_invoice(config, customers)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_generate_fact_invoice_seed_changes_amounts() -> None:
+    config, customers = _sample_customers(20)
+    other = config.model_copy(
+        update={"pipeline": config.pipeline.model_copy(update={"random_seed": 99})}
+    )
+    a = generate_fact_invoice(config, customers)
+    b = generate_fact_invoice(other, customers)
+
+    assert not a.equals(b)

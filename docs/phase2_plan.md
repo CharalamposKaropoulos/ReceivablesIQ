@@ -303,6 +303,26 @@ uv run python -m src.run_pipeline --small
 
 ---
 
+## Optional generator test hardening (non-blocking)
+
+Nice-to-have assertions beyond each step’s required **Verify** checks. Do **not**
+block step commits or the Phase 2 gate on these. Pick them up later if you want
+stricter contracts before payments / DQ injection / orchestration.
+
+### `dim_customer`
+
+- `annual_revenue` non-null and ≥ 0
+- `currency` restricted to the generator’s allowed set (currently GBP / EUR / USD)
+
+### `fact_invoice`
+
+- `invoice_date >= customer.created_date` when that date overlaps the history window
+- `open` / `overdue` rows have `outstanding_amount == invoice_amount`
+- `open` vs `overdue` consistent with `due_date` vs as-of date
+- Empty `customers` frame or missing `customer_id` column raises a clear error
+
+---
+
 ## Working rhythm (per step)
 
 1. Implement only that step’s files.
