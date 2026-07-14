@@ -28,6 +28,10 @@ Dashboard / database / application sections are required.
 > methodology. It is not a production credit-rating model, regulatory model,
 > or substitute for professional underwriting judgement.
 
+## Current phase
+Phases 1–2 complete. Next: Phase 3 (risk analytics / collections priority).
+See business_requirements.md §27 and docs/phase2_plan.md (historical).
+
 ## Working style
 - Implement one phase at a time (see business_requirements.md §27).
 - After each phase: list changed files, run relevant tests /

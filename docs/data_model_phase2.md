@@ -161,6 +161,6 @@ latest `status` / `finished_at` for refresh messaging.
 
 ## Out of scope (later phases)
 
-Risk scores, risk history, collections priority, monthly snapshots,
-`executive_metrics`, `customer_snapshot`, and validation tables are **not**
-defined here.
+Risk scores, collections priority, monthly snapshots, `executive_metrics`,
+and `customer_snapshot` are defined in
+[`data_model_phase3.md`](data_model_phase3.md). Validation tables are Phase 4+.
