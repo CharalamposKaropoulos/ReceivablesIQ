@@ -151,7 +151,7 @@ flowchart LR
 | Step | Deliverable | Status | Commit summary |
 |------|-------------|--------|----------------|
 | 01 | Analytical schema + data-model notes | Done | `feat(schema): add Phase 3 analytical tables and data-model notes` |
-| 02 | Risk / collections config | Planned | `feat(config): add risk and collections model configuration` |
+| 02 | Risk / collections config | Done | `feat(config): add risk and collections model configuration` |
 | 03 | PIT feature engineering | Planned | `feat(pipeline): add point-in-time customer feature builder` |
 | 04 | Risk scoring model | Planned | `feat(pipeline): add demonstration risk scoring model` |
 | 05 | Collections priority model | Planned | `feat(pipeline): add collections priority scoring model` |

@@ -24,3 +24,39 @@ pipeline:
   history_months: 24
   inject_data_quality_defects: true
   defect_rate: 0.03
+
+# Demonstration models only — not production credit or collections models.
+risk_model:
+  weights:
+    ageing: 0.30
+    utilisation: 0.25
+    payment: 0.20
+    overdue_ratio: 0.15
+    dispute: 0.10
+  category_thresholds:
+    # score < medium → low; < high → medium; < critical → high; else critical
+    medium: 25.0
+    high: 50.0
+    critical: 75.0
+
+collections_model:
+  weights:
+    risk: 0.35
+    overdue: 0.25
+    dpd: 0.20
+    dispute: 0.10
+    limit_breach: 0.10
+  priority_thresholds:
+    # score < medium → low; < high → medium; < critical → high; else critical
+    medium: 25.0
+    high: 50.0
+    critical: 75.0
+  recommended_actions:
+    - immediate escalation
+    - senior collections review
+    - contact within 24 hours
+    - standard collection contact
+    - monitor
+    - resolve dispute
+    - consider credit hold
+    - prepare insurance claim
